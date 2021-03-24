@@ -19,6 +19,6 @@ Q: Why this tool exists?
 
 A: My ISP provided modem do not have schedule reboot function. I want this function.
 
-Q: What next ?
+Q: What's next ?
 
 A: Build this tool by Go, setup a crontab to execute it.
