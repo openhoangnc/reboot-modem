@@ -39,50 +39,74 @@ func checkFlags() {
 
 // Login will set some cookies to client after login successful
 func login() {
+	log.Println("-> login:")
 	loginActionURL := *modemURL + "/cgi-bin/login_action.cgi"
 	loginPayload := strings.NewReader(fmt.Sprintf(`action=login&txtUserId=%s&txtPassword=%s`, *userID, *password))
+	log.Println("  -> post:", loginActionURL)
 	loginResponse, err := client.Post(loginActionURL, "application/x-www-form-urlencoded", loginPayload)
 	if err != nil {
-		log.Println("login post login_action.cgi", err)
+		log.Println("    -> error:", err)
 		os.Exit(1)
 	}
+	log.Println("  -> post: done")
 	loginResponse.Body.Close()
+
+	log.Println("-> login: done")
 }
 
 // Get DSToken and save to global variables
 func getDSToken() {
+	log.Println("-> getDSToken:")
+
 	rebootURL := *modemURL + "/cgi-bin/reboot.cgi"
+
+	log.Println("  -> get:", rebootURL)
 	rebootResponse, err := client.Get(rebootURL)
 	if err != nil {
-		log.Println("getDSToken get reboot.cgi", err)
+		log.Println("    -> error:", err)
 		os.Exit(1)
 	}
-	defer rebootResponse.Body.Close()
+	log.Println("  -> get: done")
+	rebootResponse.Body.Close()
 
+	log.Println("  -> read response:")
 	rebootPage, err := ioutil.ReadAll(rebootResponse.Body)
 	if err != nil {
-		log.Println("getDSToken read response body", err)
+		log.Println("    -> error:", err)
 		os.Exit(1)
 	}
+	log.Println("  -> read response: done")
 
+	log.Println("  -> find DSToken:")
 	matches := regexp.MustCompile("name='DSToken' value='([^']+)'").FindStringSubmatch(string(rebootPage))
 	if len(matches) != 2 {
-		log.Println("getDSToken not found")
+		log.Println("    -> not found:")
 		log.Println(string(rebootPage))
 		os.Exit(1)
 	}
+	log.Println("  -> find DSToken: done")
 	dsToken = matches[1]
+
+	log.Println("-> getDSToken: done")
 }
 
 func reboot() {
+	log.Println("-> reboot:")
+
 	rebootActionURL := *modemURL + "/cgi-bin/reboot_action.cgi"
 	rebootActionPayload := strings.NewReader(fmt.Sprintf(`waiting_action=1&DSToken=%s`, dsToken))
+
+	log.Println("  -> post:", rebootActionURL)
 	response, err := client.Post(rebootActionURL, "application/x-www-form-urlencoded", rebootActionPayload)
 	if err != nil {
-		log.Println("reboot post reboot_action.cgi", err)
+		log.Println("    -> error:", err)
 		os.Exit(1)
 	}
+	log.Println("  -> post: done")
+
 	response.Body.Close()
+
+	log.Println("-> reboot: done")
 }
 
 func getPublicIP() string {
@@ -100,6 +124,8 @@ func getPublicIP() string {
 }
 
 func main() {
+	log.SetOutput(os.Stdout)
+
 	initClient()
 	checkFlags()
 
@@ -116,11 +142,12 @@ func main() {
 	for {
 		publicIP := getPublicIP()
 		if len(publicIP) > 0 {
-			waitDuration := -time.Until(waitBegin).Seconds()
-			if waitDuration > 1 {
+			waitDuration := -time.Until(waitBegin)
+			if waitDuration.Seconds() > 1 {
 				fmt.Println()
 			}
 			log.Println("New PublicIP:", publicIP)
+			log.Println("Rebooting duration:", waitDuration.String())
 			return
 		}
 		fmt.Print(".")
