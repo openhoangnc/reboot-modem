@@ -14,6 +14,8 @@ import (
 	"time"
 )
 
+const maxHttpRetry = 5
+
 var (
 	modemURL = flag.String("url", "https://192.168.1.100:8080", "URL")
 	userID   = flag.String("user", "admin", "User")
@@ -25,6 +27,7 @@ var (
 func initClient() {
 	client = &http.Client{
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+		Timeout:   3 * time.Second,
 	}
 	client.Jar, _ = cookiejar.New(nil)
 }
@@ -43,13 +46,21 @@ func login() {
 	loginActionURL := *modemURL + "/cgi-bin/login_action.cgi"
 	loginPayload := strings.NewReader(fmt.Sprintf(`action=login&txtUserId=%s&txtPassword=%s`, *userID, *password))
 	log.Println("  -> post:", loginActionURL)
-	loginResponse, err := client.Post(loginActionURL, "application/x-www-form-urlencoded", loginPayload)
-	if err != nil {
-		log.Println("    -> error:", err)
-		os.Exit(1)
+
+	for try := 0; try < maxHttpRetry; try++ {
+		loginResponse, err := client.Post(loginActionURL, "application/x-www-form-urlencoded", loginPayload)
+		if err != nil {
+			if try < maxHttpRetry {
+				continue
+			}
+			log.Println("    -> error:", err)
+			os.Exit(1)
+		}
+		log.Println("  -> post: done")
+		ioutil.ReadAll(loginResponse.Body)
+		loginResponse.Body.Close()
+		break
 	}
-	log.Println("  -> post: done")
-	loginResponse.Body.Close()
 
 	log.Println("-> login: done")
 }
@@ -61,33 +72,42 @@ func getDSToken() {
 	rebootURL := *modemURL + "/cgi-bin/reboot.cgi"
 
 	log.Println("  -> get:", rebootURL)
-	rebootResponse, err := client.Get(rebootURL)
-	if err != nil {
-		log.Println("    -> error:", err)
-		os.Exit(1)
-	}
-	log.Println("  -> get: done")
-	rebootResponse.Body.Close()
 
-	log.Println("  -> read response:")
-	rebootPage, err := ioutil.ReadAll(rebootResponse.Body)
-	if err != nil {
-		log.Println("    -> error:", err)
-		os.Exit(1)
-	}
-	log.Println("  -> read response: done")
+	for try := 0; try < maxHttpRetry; try++ {
+		rebootResponse, err := client.Get(rebootURL)
+		if err != nil {
+			if try < maxHttpRetry {
+				continue
+			}
+			log.Println("    -> error:", err)
+			os.Exit(1)
+		}
+		log.Println("  -> get: done")
+		defer rebootResponse.Body.Close()
 
-	log.Println("  -> find DSToken:")
-	matches := regexp.MustCompile("name='DSToken' value='([^']+)'").FindStringSubmatch(string(rebootPage))
-	if len(matches) != 2 {
-		log.Println("    -> not found:")
-		log.Println(string(rebootPage))
-		os.Exit(1)
+		log.Println("  -> read response:")
+		rebootPage, err := ioutil.ReadAll(rebootResponse.Body)
+		if err != nil {
+			if try < maxHttpRetry {
+				continue
+			}
+			log.Println("    -> error:", err)
+			os.Exit(1)
+		}
+		log.Println("  -> read response: done")
+		log.Println("  -> find DSToken:")
+		matches := regexp.MustCompile("name='DSToken' value='([^']+)'").FindStringSubmatch(string(rebootPage))
+		if len(matches) != 2 {
+			log.Println("    -> not found:")
+			log.Println(string(rebootPage))
+			os.Exit(1)
+		}
+		log.Println("  -> find DSToken: done")
+		dsToken = matches[1]
+		break
 	}
-	log.Println("  -> find DSToken: done")
-	dsToken = matches[1]
 
-	log.Println("-> getDSToken: done")
+	log.Println("-> getDSToken: done: ", dsToken)
 }
 
 func reboot() {
@@ -104,6 +124,7 @@ func reboot() {
 	}
 	log.Println("  -> post: done")
 
+	ioutil.ReadAll(response.Body)
 	response.Body.Close()
 
 	log.Println("-> reboot: done")
