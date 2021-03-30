@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
@@ -116,16 +117,31 @@ func reboot() {
 	rebootActionURL := *modemURL + "/cgi-bin/reboot_action.cgi"
 	rebootActionPayload := strings.NewReader(fmt.Sprintf(`waiting_action=1&DSToken=%s`, dsToken))
 
-	log.Println("  -> post:", rebootActionURL)
+	log.Println("  -> post: waiting_action 1", rebootActionURL)
 	response, err := client.Post(rebootActionURL, "application/x-www-form-urlencoded", rebootActionPayload)
 	if err != nil {
 		log.Println("    -> error:", err)
 		os.Exit(1)
 	}
-	log.Println("  -> post: done")
-
+	log.Println("  -> post: waiting_action 1 done")
 	ioutil.ReadAll(response.Body)
 	response.Body.Close()
+
+	rebootActionPayload = strings.NewReader(fmt.Sprintf(`waiting_action=0&DSToken=%s`, dsToken))
+	log.Println("  -> post: waiting_action 0", rebootActionURL)
+	response, err = client.Post(rebootActionURL, "application/x-www-form-urlencoded", rebootActionPayload)
+	if err != nil {
+		if err, ok := err.(net.Error); !ok || !err.Timeout() {
+			log.Println("    -> error:", err)
+			os.Exit(1)
+		}
+	}
+
+	log.Println("  -> post: waiting_action 0 done")
+	if response != nil && response.Body != nil {
+		ioutil.ReadAll(response.Body)
+		response.Body.Close()
+	}
 
 	log.Println("-> reboot: done")
 }
