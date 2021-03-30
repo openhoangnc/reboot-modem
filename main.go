@@ -124,7 +124,8 @@ func reboot() {
 		os.Exit(1)
 	}
 	log.Println("  -> post: waiting_action 1 done")
-	ioutil.ReadAll(response.Body)
+	b, _ := ioutil.ReadAll(response.Body)
+	log.Println(string(b))
 	response.Body.Close()
 
 	rebootActionPayload = strings.NewReader(fmt.Sprintf(`waiting_action=0&DSToken=%s`, dsToken))
@@ -139,7 +140,8 @@ func reboot() {
 
 	log.Println("  -> post: waiting_action 0 done")
 	if response != nil && response.Body != nil {
-		ioutil.ReadAll(response.Body)
+		b, _ := ioutil.ReadAll(response.Body)
+		log.Println(string(b))
 		response.Body.Close()
 	}
 
@@ -175,6 +177,7 @@ func main() {
 
 	log.Println("Reboot requested")
 	log.Println("Checking for new public IP")
+	time.Sleep(5 * time.Second)
 	waitBegin := time.Now()
 	for {
 		publicIP := getPublicIP()
