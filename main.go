@@ -125,9 +125,12 @@ func reboot() {
 	}
 	log.Println("  -> post: waiting_action 1 done")
 	b, _ := ioutil.ReadAll(response.Body)
-	log.Println(string(b))
 	response.Body.Close()
 
+	if len(b) == 0 {
+		log.Println("    -> error: empty response")
+		os.Exit(1)
+	}
 	rebootActionPayload = strings.NewReader(fmt.Sprintf(`waiting_action=0&DSToken=%s`, dsToken))
 	log.Println("  -> post: waiting_action 0", rebootActionURL)
 	response, err = client.Post(rebootActionURL, "application/x-www-form-urlencoded", rebootActionPayload)
@@ -140,8 +143,7 @@ func reboot() {
 
 	log.Println("  -> post: waiting_action 0 done")
 	if response != nil && response.Body != nil {
-		b, _ := ioutil.ReadAll(response.Body)
-		log.Println(string(b))
+		ioutil.ReadAll(response.Body)
 		response.Body.Close()
 	}
 
@@ -169,7 +171,8 @@ func main() {
 	checkFlags()
 
 	log.Println("Reboot-modem")
-	log.Println("Current PublicIP:", getPublicIP())
+	currentIP := getPublicIP()
+	log.Println("Current PublicIP:", currentIP)
 
 	login()
 	getDSToken()
@@ -180,13 +183,18 @@ func main() {
 	time.Sleep(5 * time.Second)
 	waitBegin := time.Now()
 	for {
-		publicIP := getPublicIP()
-		if len(publicIP) > 0 {
+		newIP := getPublicIP()
+		if len(newIP) > 0 {
 			waitDuration := -time.Until(waitBegin)
 			if waitDuration.Seconds() > 1 {
 				fmt.Println()
 			}
-			log.Println("New PublicIP:", publicIP)
+			log.Println("New PublicIP:", newIP)
+			if newIP == currentIP {
+				log.Println("PublicIP has no change")
+			} else {
+				log.Println("PublicIP has changed")
+			}
 			log.Println("Rebooting duration:", waitDuration.String())
 			return
 		}
